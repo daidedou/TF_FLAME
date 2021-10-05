@@ -7,6 +7,7 @@ from psbody.mesh.meshviewer import MeshViewer
 
 from tf_smpl.batch_smpl import SMPL
 from tensorflow.contrib.opt import ScipyOptimizerInterface as scipy_pt
+import argparse
 
 def fit_3D_mesh(target_3d_mesh_fname, model_fname, weights, show_fitting=True):
     '''
@@ -57,18 +58,24 @@ def fit_3D_mesh(target_3d_mesh_fname, model_fname, weights, show_fitting=True):
 
         print('Fitting done')
 
-        if show_fitting:
-            # Visualize fitting
-            mv = MeshViewer()
-            fitting_mesh = Mesh(session.run(tf_model), smpl.f)
-            fitting_mesh.set_vertex_colors('light sky blue')
+        # if show_fitting:
+        #     # Visualize fitting
+        #     mv = MeshViewer()
+        #     fitting_mesh = Mesh(session.run(tf_model), smpl.f)
+        #     fitting_mesh.set_vertex_colors('light sky blue')
+        #
+        #     mv.set_static_meshes([target_mesh, fitting_mesh])
+        #     six.moves.input('Press key to continue')
+        vertices = session.run(tf_model)
+        pose = session.run(tf_pose)
+        shape = session.run(tf_shape)
+        exp = session.run(tf_exp)
 
-            mv.set_static_meshes([target_mesh, fitting_mesh])
-            six.moves.input('Press key to continue')
+    return Mesh(vertices, smpl.f), pose, shape, exp
 
-        return Mesh(session.run(tf_model), smpl.f), session.run(tf_pose), session.run(tf_shape), session.run(tf_exp)
 
-def run_COMA(path, output_path):
+
+def do_stuff(mesh_path, output_mesh, pers_output, mesh_name):
     # Path of the FLAME model
     model_fname = './models/generic_model.pkl'
     # model_fname = '/models/female_model.pkl'
@@ -89,35 +96,19 @@ def run_COMA(path, output_path):
     weights['eyeballs_pose'] = 1e-4
     # Show landmark fitting (default: red = target landmarks, blue = fitting landmarks)
     show_fitting = False
-    all_pers = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
-    for pers in all_pers:
-        pers_path = os.path.join(path, pers)
-        pers_output = os.path.join(output_path, pers)
-        os.makedirs(pers_output, exist_ok=True)
-        meshes = [f for f in os.listdir(pers_path) if (".obj" in f) or (".ply" in f)]
-        folders = [f for f in os.listdir(pers_path) if os.path.isdir(os.path.join(pers_path, f))]
-        print(folders)
-        for folder in folders:
-            meshes += [(folder, f) for f in os.listdir(os.path.join(pers_path, folder)) if (".obj" in f) or (".ply" in f)]
-        for mesh in meshes:
-            if type(mesh) == tuple:
-                os.makedirs(os.path.join(pers_output, mesh[0]), exist_ok=True)
-                mesh = os.path.join(mesh[0], mesh[1])
-            output_mesh = os.path.join(pers_output, mesh)
-            if not os.path.exists(output_mesh):
-                print("Fitting file: " + output_mesh)
-                mesh_path = os.path.join(pers_path, mesh)
-                result_mesh, pose, shape, exp = fit_3D_mesh(mesh_path, model_fname, weights, show_fitting=show_fitting)
-                result_mesh.write_ply(output_mesh)
-                np_params = {"pose": pose, "shape": shape, "exp": exp}
-                np.save(os.path.join(pers_output, mesh.replace(".ply", ".npy")), np_params)
-            else:
-                print("Fitting already done for : " + output_mesh)
-
+    result_mesh, pose, shape, exp = fit_3D_mesh(mesh_path, model_fname, weights, show_fitting=show_fitting)
+    result_mesh.write_ply(output_mesh)
+    np_params = {"pose": pose, "shape": shape, "exp": exp}
+    np.save(os.path.join(pers_output, mesh_name.replace(".ply", ".npy")), np_params)
 
 
 if __name__ == '__main__':
-    path_COMA = ""
-    output_path = ""
-    os.makedirs(output_path, exist_ok=True)
-    run_COMA(path_COMA, output_path)
+
+    all_args = argparse.ArgumentParser()
+    all_args.add_argument("--mesh_path", required=True)
+    all_args.add_argument("--output_mesh", required=True)
+    all_args.add_argument("--pers_output", required=True)
+    all_args.add_argument("--mesh_name", required=True)
+
+    args = vars(all_args.parse_args())
+    do_stuff(args["mesh_path"], args["output_mesh"], args["pers_output"], args["mesh_name"])
